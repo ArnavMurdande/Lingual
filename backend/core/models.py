@@ -17,6 +17,11 @@ class SentenceScore(BaseModel):
     rank: int
     reasons: Dict[str, float]  # Breakdown: tfidf, textrank, embedding (centrality)
 
+class NerEntity(BaseModel):
+    name: str
+    entity: str
+    relationship: str
+
 class SummaryResponse(BaseModel):
     original_text: str
     summary_text: str
@@ -24,3 +29,5 @@ class SummaryResponse(BaseModel):
     refined_summary: Optional[str] = None
     ranking_data: List[SentenceScore]
     metrics: Dict[str, Any]  # Compression ratio, etc.
+    citations: List[str] = []
+    ner_data: List[NerEntity] = []

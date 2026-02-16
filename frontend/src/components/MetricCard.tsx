@@ -8,6 +8,7 @@ interface MetricCardProps {
   icon: LucideIcon;
   trend?: string;
   delay?: number;
+  className?: string;
 }
 
 export function MetricCard({
@@ -16,13 +17,17 @@ export function MetricCard({
   icon: Icon,
   trend,
   delay = 0,
+  className,
 }: MetricCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
-      className="bg-slate-900/50 border border-slate-800 backdrop-blur-sm p-4 rounded-xl flex items-center gap-4 hover:border-slate-700 transition-colors"
+      className={cn(
+        "bg-slate-900/50 border border-slate-800 backdrop-blur-sm p-4 rounded-xl flex items-center gap-4 hover:border-slate-700 transition-colors",
+        className
+      )}
     >
       <div className="p-3 bg-cyan-950/30 rounded-lg text-cyan-400">
         <Icon size={20} />

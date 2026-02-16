@@ -13,16 +13,42 @@ import {
   Settings2,
   Languages,
   FileOutput,
+  Users,
+  BookOpen,
+  X,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { MetricCard } from "@/components/MetricCard";
 import { HeatMapHighlighter } from "@/components/HeatMapHighlighter";
 import { cn } from "@/lib/utils";
 
+interface NerEntity {
+  name: string;
+  entity: string;
+  relationship: string;
+}
+
+interface SummaryResult {
+  original_text: string;
+  summary_text: string;
+  extractive_summary: string[];
+  refined_summary?: string;
+  ranking_data: any[];
+  metrics: {
+    original_length: number;
+    summary_length: number;
+    compression_ratio: number;
+    sentence_count: number;
+    kept_sentences: number;
+  };
+  citations: string[];
+  ner_data: NerEntity[];
+}
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<SummaryResult | null>(null);
   const [textInput, setTextInput] = useState("");
 
   // Configuration State
@@ -30,6 +56,10 @@ export default function Home() {
   const [outputLanguage, setOutputLanguage] = useState("en");
   const [summaryMode, setSummaryMode] = useState("extractive");
   const [isDragging, setIsDragging] = useState(false);
+
+  // Modals state
+  const [isNerModalOpen, setIsNerModalOpen] = useState(false);
+  const [isCitationModalOpen, setIsCitationModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,9 +86,6 @@ export default function Home() {
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const droppedFile = e.dataTransfer.files[0];
-      const validTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-      
-      // Basic validation (or just trust the backend/extension check)
       if (droppedFile.name.endsWith('.txt') || droppedFile.name.endsWith('.pdf') || droppedFile.name.endsWith('.docx')) {
         setFile(droppedFile);
         setTextInput("");
@@ -84,7 +111,6 @@ export default function Home() {
       if (file) {
         const formData = new FormData();
         formData.append("file", file);
-        // formData.append("sentences_count", "5"); // Default fallback
         formData.append("summary_ratio", ratio.toString());
         formData.append("language", outputLanguage);
         formData.append("mode", summaryMode);
@@ -101,7 +127,6 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: textInput,
-            // sentences_count: 5,
             summary_ratio: ratio,
             language: outputLanguage,
             mode: summaryMode,
@@ -147,7 +172,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-100 p-6 md:p-12 font-sans selection:bg-cyan-500/30">
+    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black text-slate-100 p-6 md:p-12 font-sans selection:bg-cyan-500/30 relative">
       {/* Header */}
       <header className="max-w-7xl mx-auto mb-12 flex justify-between items-center">
         <div>
@@ -338,13 +363,16 @@ export default function Home() {
 
           {/* Metrics Panel (Bottom Left) */}
           {result && (
-            <div className="grid grid-cols-1 gap-3">
-              <MetricCard
-                label="Compression"
-                value={`${((result.metrics?.compression_ratio ?? 0) * 100).toFixed(0)}%`}
-                icon={BarChart3}
-                delay={0.1}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <MetricCard
+                  label="Compression"
+                  value={`${((result.metrics?.compression_ratio ?? 0) * 100).toFixed(0)}%`}
+                  icon={BarChart3}
+                  delay={0.1}
+                />
+              </div>
+              
               <MetricCard
                 label="Sentences"
                 value={result.metrics?.sentence_count ?? 0}
@@ -357,6 +385,33 @@ export default function Home() {
                 icon={CheckCircle2}
                 delay={0.3}
               />
+              
+              {/* Interactive Metrics */}
+              <div 
+                className="cursor-pointer active:scale-95 transition-transform"
+                onClick={() => setIsNerModalOpen(true)}
+              >
+                 <MetricCard
+                  label="Total NER"
+                  value={result.ner_data?.length ?? 0}
+                  icon={Users}
+                  delay={0.4}
+                  trend="View Entities"
+                />
+              </div>
+
+              <div 
+                className="cursor-pointer active:scale-95 transition-transform"
+                onClick={() => setIsCitationModalOpen(true)}
+              >
+                <MetricCard
+                  label="Citations"
+                  value={result.citations?.length ?? 0}
+                  icon={BookOpen}
+                  delay={0.5}
+                  trend="View Sources"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -450,6 +505,125 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Logic for Modals */}
+      <AnimatePresence>
+        {isNerModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+             {/* Backdrop */}
+             <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsNerModalOpen(false)}
+             />
+             
+             {/* Modal Content */}
+             <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
+             >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold flex items-center gap-2 text-indigo-400">
+                    <Users size={24} /> Detected Entities
+                  </h3>
+                  <button 
+                    onClick={() => setIsNerModalOpen(false)}
+                    className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <X className="text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="overflow-y-auto pr-2 custom-scrollbar flex-1">
+                  {result?.ner_data && result.ner_data.length > 0 ? (
+                    <table className="w-full text-left text-sm text-slate-300">
+                      <thead className="text-xs uppercase bg-slate-950/50 text-slate-500 sticky top-0 backdrop-blur-md">
+                        <tr>
+                          <th className="px-4 py-3 rounded-tl-lg font-semibold">Entity Name</th>
+                          <th className="px-4 py-3 font-semibold">Type</th>
+                          <th className="px-4 py-3 rounded-tr-lg font-semibold">Context / Relationship</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {result.ner_data.map((item, idx) => (
+                           <tr key={idx} className="hover:bg-slate-800/50 transition-colors">
+                              <td className="px-4 py-3 font-medium text-slate-200">{item.name}</td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-1 rounded bg-slate-800 border border-slate-700 text-xs font-mono text-cyan-400">
+                                  {item.entity}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-400 italic">{item.relationship}</td>
+                           </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="text-center py-12 text-slate-500">
+                      No significant named entities detected.
+                    </div>
+                  )}
+                </div>
+             </motion.div>
+          </div>
+        )}
+
+        {isCitationModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+             {/* Backdrop */}
+             <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setIsCitationModalOpen(false)}
+             />
+             
+             {/* Modal Content */}
+             <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl"
+             >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-bold flex items-center gap-2 text-emerald-400">
+                    <BookOpen size={24} /> References & Citations
+                  </h3>
+                  <button 
+                    onClick={() => setIsCitationModalOpen(false)}
+                    className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+                  >
+                    <X className="text-slate-400" />
+                  </button>
+                </div>
+                
+                <div className="overflow-y-auto pr-2 custom-scrollbar flex-1 space-y-3">
+                   {result?.citations && result.citations.length > 0 ? (
+                      result.citations.map((cit, idx) => (
+                        <div key={idx} className="p-4 bg-slate-950/40 border border-slate-800 rounded-lg flex gap-3 hover:border-slate-600 transition-colors">
+                            <span className="text-xs font-mono text-slate-500 min-w-[24px] uppercase">
+                              [{idx + 1}]
+                            </span>
+                            <p className="text-sm text-slate-300 leading-relaxed font-serif">
+                              {cit}
+                            </p>
+                        </div>
+                      ))
+                   ) : (
+                      <div className="text-center py-12 text-slate-500">
+                        No bibliography or references section found in the document.
+                      </div>
+                   )}
+                </div>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }

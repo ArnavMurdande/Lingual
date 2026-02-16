@@ -10,5 +10,6 @@ torch --index-url https://download.pytorch.org/whl/cpu
 numpy<2.0.0
 pydantic
 docx2txt
-PyPDF2
+pymupdf
+sentencepiece
 python-docx
