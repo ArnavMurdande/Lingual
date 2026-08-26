@@ -1,72 +1,112 @@
-CREATE TABLE dim_customer (
-    customer_key INT PRIMARY KEY,
-    customer_name VARCHAR(100),
-    region VARCHAR(50),
-    segment VARCHAR(50)
+--Created Database
+CREATE DATABASE IF NOT EXISTS ShopEasy_Profile;
+USE ShopEasy_Profile;
+
+
+--Created Table
+CREATE TABLE Customers (
+    CustomerID INT PRIMARY KEY,
+    FullName VARCHAR(100),
+    Email VARCHAR(120),
+    Phone VARCHAR(20),
+    City VARCHAR(50),
+    Country VARCHAR(50)
 );
 
-CREATE TABLE dim_product (
-    product_key INT PRIMARY KEY,
-    product_name VARCHAR(100),
-    category VARCHAR(50),
-    sub_category VARCHAR(50)
-);
 
-CREATE TABLE dim_date (
-    date_key INT PRIMARY KEY,
-    full_date DATE,
-    day INT,
-    month INT,
-    quarter INT,
-    year INT
-);
+--Inserted Data
+INSERT INTO Customers VALUES
+(1,'Amit  Sharma','amit@shop.com','9876543210','Delhi','India'),
+(2,'Neha  Verma','neha@shop.com',' ','mumbai','india'),
+(3,'Ravi Kumar',NULL,'9567843210','Bangalore','India'),
+(4,'Amit  Sharma','amit@shop.com','9876543210','Delhi','India'),
+(5,NULL,'john@shop.com','9999999999','Chennai','INDIA');
 
-CREATE TABLE fact_sales (
-    sales_key INT PRIMARY KEY,
-    date_key INT,
-    customer_key INT,
-    product_key INT,
-    quantity_sold INT,
-    sales_amount DECIMAL(10,2),
-    FOREIGN KEY (date_key) REFERENCES dim_date(date_key),
-    FOREIGN KEY (customer_key) REFERENCES dim_customer(customer_key),
-    FOREIGN KEY (product_key) REFERENCES dim_product(product_key)
-);
+--Data Profiling
+--Total Records
+SELECT COUNT(*) AS TotalRecords
+FROM Customers;
 
-INSERT INTO dim_customer VALUES
-(1, 'Alice Corp', 'North', 'Enterprise'),
-(2, 'Beta LLC', 'South', 'SMB');
 
-INSERT INTO dim_product VALUES
-(1, 'Laptop Pro', 'Electronics', 'Computers'),
-(2, 'Office Chair', 'Furniture', 'Chairs');
+--Checked NULL and Blank Values
+SELECT
+    SUM(CASE WHEN FullName IS NULL OR TRIM(FullName) = '' THEN 1 ELSE 0 END) AS NullNames,
+    SUM(CASE WHEN Email IS NULL OR TRIM(Email) = '' THEN 1 ELSE 0 END) AS NullEmails,
+    SUM(CASE WHEN Phone IS NULL OR TRIM(Phone) = '' THEN 1 ELSE 0 END) AS NullPhones
+FROM Customers;
 
-INSERT INTO dim_date VALUES
-(20250101, '2025-01-01', 1, 1, 1, 2025),
-(20250102, '2025-01-02', 2, 1, 1, 2025);
 
-INSERT INTO fact_sales VALUES
-(1, 20250101, 1, 1, 10, 15000.00),
-(2, 20250102, 2, 2, 5, 1000.00);
+--Checked Duplicate Customers
+SELECT
+    FullName,
+    Email,
+    COUNT(*) AS DupCount
+FROM Customers
+GROUP BY FullName, Email
+HAVING COUNT(*) > 1;
 
-SELECT SUM(sales_amount) AS total_sales
-FROM fact_sales;
 
-SELECT c.customer_name, SUM(f.sales_amount) AS total_sales
-FROM fact_sales f
-JOIN dim_customer c
-ON f.customer_key = c.customer_key
-GROUP BY c.customer_name;
+--Checked Inconsistent Country Values
+SELECT DISTINCT Country
+FROM Customers;
 
-SELECT p.category, SUM(f.sales_amount) AS total_sales
-FROM fact_sales f
-JOIN dim_product p
-ON f.product_key = p.product_key
-GROUP BY p.category;
 
-SELECT d.full_date, SUM(f.sales_amount) AS daily_sales
-FROM fact_sales f
-JOIN dim_date d
-ON f.date_key = d.date_key
-GROUP BY d.full_date
-ORDER BY d.full_date;
+--Data Cleaning
+--Removed Extra Spaces and Standardize Text
+UPDATE Customers
+SET
+    FullName = TRIM(FullName),
+    City = CONCAT(
+        UPPER(LEFT(TRIM(City), 1)),
+        LOWER(SUBSTRING(TRIM(City), 2))
+    ),
+    Country = UPPER(TRIM(Country));
+
+
+--Converted Blank Phone Numbers to NULL
+UPDATE Customers
+SET Phone = NULL
+WHERE TRIM(Phone) = '';
+
+
+--Replaced Missing Country Values
+UPDATE Customers
+SET Country = 'INDIA'
+WHERE Country IS NULL;
+
+
+--Replaced Missing Names
+UPDATE Customers
+SET FullName = 'Unknown Customer'
+WHERE FullName IS NULL;
+
+
+--Removed Duplicates (Keep Lowest CustomerID)
+DELETE c1
+FROM Customers c1
+JOIN Customers c2
+    ON c1.FullName = c2.FullName
+   AND c1.Email = c2.Email
+   AND c1.CustomerID > c2.CustomerID;
+
+
+
+--Validation
+--Viewed Cleaned Data
+SELECT *
+FROM Customers;
+
+
+--Checked Phone Length Issues
+SELECT *
+FROM Customers
+WHERE Phone IS NOT NULL
+  AND (LENGTH(Phone) < 10 OR LENGTH(Phone) > 12);
+
+
+--Final Profile Report
+SELECT
+    COUNT(*) AS Total,
+    COUNT(DISTINCT Email) AS UniqueEmails,
+    SUM(CASE WHEN City IS NULL THEN 1 ELSE 0 END) AS NullCities
+FROM Customers;
