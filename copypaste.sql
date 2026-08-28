@@ -1,112 +1,52 @@
---Created Database
-CREATE DATABASE IF NOT EXISTS ShopEasy_Profile;
-USE ShopEasy_Profile;
+# Import python packages
+import streamlit as st
+import os
 
+# Write directly to the app
+st.title(f"Example Streamlit App :balloon: {st.__version__}")
+st.write(
+  """Replace this example with your own code!
+  **And if you're new to Streamlit,** check
+  out our easy-to-follow guides at
+  [docs.streamlit.io](https://docs.streamlit.io).
+  """
+)
 
---Created Table
-CREATE TABLE Customers (
-    CustomerID INT PRIMARY KEY,
-    FullName VARCHAR(100),
-    Email VARCHAR(120),
-    Phone VARCHAR(20),
-    City VARCHAR(50),
-    Country VARCHAR(50)
-);
+st.markdown("""
+- :page_with_curl: [Streamlit open source documentation](https://docs.streamlit.io)
+- :snowflake: [Streamlit in Snowflake documentation](https://docs.snowflake.com/en/developer-guide/streamlit/about-streamlit)
+- :books: [Demo repo with templates](https://github.com/Snowflake-Labs/snowflake-demo-streamlit)
+- :memo: [Streamlit in Snowflake release notes](https://docs.snowflake.com/en/release-notes/streamlit-in-snowflake)
+""")
 
+# Create a database connection to Snowflake
+conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
+session = conn.session()
 
---Inserted Data
-INSERT INTO Customers VALUES
-(1,'Amit  Sharma','amit@shop.com','9876543210','Delhi','India'),
-(2,'Neha  Verma','neha@shop.com',' ','mumbai','india'),
-(3,'Ravi Kumar',NULL,'9567843210','Bangalore','India'),
-(4,'Amit  Sharma','amit@shop.com','9876543210','Delhi','India'),
-(5,NULL,'john@shop.com','9999999999','Chennai','INDIA');
+# Use an interactive slider to get user input
+hifives_val = st.slider(
+  "Number of high-fives in Q3",
+  min_value=0,
+  max_value=90,
+  value=60,
+  help="Use this to enter the number of high-fives you gave in Q3",
+)
 
---Data Profiling
---Total Records
-SELECT COUNT(*) AS TotalRecords
-FROM Customers;
+#  Create an example dataframe
+#  Note: this is just some dummy data, but you can easily connect to your Snowflake data
+#  It is also possible to query data using raw SQL using session.sql() e.g. session.sql("select * from table")
+created_dataframe = session.create_dataframe(
+  [[50, 25, "Q1"], [20, 35, "Q2"], [hifives_val, 30, "Q3"]],
+  schema=["HIGH_FIVES", "FIST_BUMPS", "QUARTER"],
+)
 
+# Execute the query and convert it into a Pandas dataframe
+queried_data = created_dataframe.to_pandas()
 
---Checked NULL and Blank Values
-SELECT
-    SUM(CASE WHEN FullName IS NULL OR TRIM(FullName) = '' THEN 1 ELSE 0 END) AS NullNames,
-    SUM(CASE WHEN Email IS NULL OR TRIM(Email) = '' THEN 1 ELSE 0 END) AS NullEmails,
-    SUM(CASE WHEN Phone IS NULL OR TRIM(Phone) = '' THEN 1 ELSE 0 END) AS NullPhones
-FROM Customers;
+# Create a simple bar chart
+# See docs.streamlit.io for more types of charts
+st.subheader("Number of high-fives")
+st.bar_chart(data=queried_data, x="QUARTER", y="HIGH_FIVES")
 
-
---Checked Duplicate Customers
-SELECT
-    FullName,
-    Email,
-    COUNT(*) AS DupCount
-FROM Customers
-GROUP BY FullName, Email
-HAVING COUNT(*) > 1;
-
-
---Checked Inconsistent Country Values
-SELECT DISTINCT Country
-FROM Customers;
-
-
---Data Cleaning
---Removed Extra Spaces and Standardize Text
-UPDATE Customers
-SET
-    FullName = TRIM(FullName),
-    City = CONCAT(
-        UPPER(LEFT(TRIM(City), 1)),
-        LOWER(SUBSTRING(TRIM(City), 2))
-    ),
-    Country = UPPER(TRIM(Country));
-
-
---Converted Blank Phone Numbers to NULL
-UPDATE Customers
-SET Phone = NULL
-WHERE TRIM(Phone) = '';
-
-
---Replaced Missing Country Values
-UPDATE Customers
-SET Country = 'INDIA'
-WHERE Country IS NULL;
-
-
---Replaced Missing Names
-UPDATE Customers
-SET FullName = 'Unknown Customer'
-WHERE FullName IS NULL;
-
-
---Removed Duplicates (Keep Lowest CustomerID)
-DELETE c1
-FROM Customers c1
-JOIN Customers c2
-    ON c1.FullName = c2.FullName
-   AND c1.Email = c2.Email
-   AND c1.CustomerID > c2.CustomerID;
-
-
-
---Validation
---Viewed Cleaned Data
-SELECT *
-FROM Customers;
-
-
---Checked Phone Length Issues
-SELECT *
-FROM Customers
-WHERE Phone IS NOT NULL
-  AND (LENGTH(Phone) < 10 OR LENGTH(Phone) > 12);
-
-
---Final Profile Report
-SELECT
-    COUNT(*) AS Total,
-    COUNT(DISTINCT Email) AS UniqueEmails,
-    SUM(CASE WHEN City IS NULL THEN 1 ELSE 0 END) AS NullCities
-FROM Customers;
+st.subheader("Underlying data")
+st.dataframe(queried_data, use_container_width=True)
