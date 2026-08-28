@@ -1,122 +1,145 @@
-/*=========================================================
-  LOGISTICS LAB - COMPLETE SQL SCRIPT
-=========================================================*/
+import streamlit as st
+import pandas as pd
+from snowflake.snowpark.context import get_active_session
 
--- Create Database and Schema
-CREATE OR REPLACE DATABASE LOGISTICS_LAB;
+st.set_page_config(
+    page_title="Logistics Performance Dashboard",
+    layout="wide"
+)
 
-USE DATABASE LOGISTICS_LAB;
+session = get_active_session()
 
-CREATE OR REPLACE SCHEMA DATA;
+st.title("🚚 Logistics Performance Dashboard")
 
-USE SCHEMA DATA;
+# Load Data
+df = session.sql("""
+    SELECT *
+    FROM DELIVERIES
+""").to_pandas()
 
--- Create Deliveries Table
-CREATE OR REPLACE TABLE DELIVERIES (
-    ORDER_ID STRING,
-    ORDER_DATE DATE,
-    CITY STRING,
-    VEHICLE_TYPE STRING,
-    DISTANCE_KM NUMBER(8,2),
-    DELIVERY_TIME_MIN INT,
-    IS_ONTIME STRING,
-    DRIVER_RATING NUMBER(3,1)
-);
+# -----------------------------
+# KPI Metrics
+# -----------------------------
 
-----------------------------------------------------------
--- Verification Queries (Run After Loading CSV)
-----------------------------------------------------------
+total_orders = len(df)
 
--- Check records loaded
-SELECT COUNT(*) AS TOTAL_RECORDS
-FROM DELIVERIES;
+ontime_pct = round(
+    (df["IS_ONTIME"] == "Yes").mean() * 100,
+    1
+)
 
--- Preview data
-SELECT *
-FROM DELIVERIES
-LIMIT 10;
+avg_delivery_time = round(
+    df["DELIVERY_TIME_MIN"].mean(),
+    1
+)
 
-----------------------------------------------------------
--- Query 1: Total Orders & Overall On-Time Rate
-----------------------------------------------------------
+avg_rating = round(
+    df["DRIVER_RATING"].mean(),
+    2
+)
 
-SELECT
-    COUNT(*) AS TOTAL_ORDERS,
-    ROUND(
-        100.0 * AVG(
-            CASE
-                WHEN IS_ONTIME = 'Yes' THEN 1.0
-                ELSE 0.0
-            END
-        ),
-        1
-    ) || '%' AS ONTIME_PERCENTAGE
-FROM DELIVERIES;
+col1, col2, col3, col4 = st.columns(4)
 
-----------------------------------------------------------
--- Query 2: Performance by City
-----------------------------------------------------------
+col1.metric("Total Orders", f"{total_orders:,}")
+col2.metric("On-Time %", f"{ontime_pct}%")
+col3.metric("Avg Delivery Time", f"{avg_delivery_time} min")
+col4.metric("Avg Driver Rating", avg_rating)
 
-SELECT
-    CITY,
-    COUNT(*) AS TOTAL_DELIVERIES,
-    ROUND(AVG(DELIVERY_TIME_MIN), 1) AS AVG_MINUTES,
-    ROUND(
-        100.0 * AVG(
-            CASE
-                WHEN IS_ONTIME = 'Yes' THEN 1.0
-                ELSE 0.0
-            END
-        ),
-        1
-    ) || '%' AS ONTIME_PCT
-FROM DELIVERIES
-GROUP BY CITY
-ORDER BY ONTIME_PCT DESC;
+st.divider()
 
-----------------------------------------------------------
--- Query 3: Vehicle Type Performance
-----------------------------------------------------------
+# -----------------------------
+# Deliveries by City
+# -----------------------------
 
-SELECT
-    VEHICLE_TYPE,
-    ROUND(AVG(DELIVERY_TIME_MIN), 1) AS AVG_MINUTES,
-    ROUND(AVG(DISTANCE_KM), 1) AS AVG_DISTANCE_KM,
-    ROUND(
-        100.0 * AVG(
-            CASE
-                WHEN IS_ONTIME = 'Yes' THEN 1.0
-                ELSE 0.0
-            END
-        ),
-        1
-    ) || '%' AS ONTIME_PCT
-FROM DELIVERIES
-GROUP BY VEHICLE_TYPE
-ORDER BY AVG_MINUTES;
+city_orders = (
+    df.groupby("CITY")
+      .size()
+      .reset_index(name="TOTAL_DELIVERIES")
+)
 
-----------------------------------------------------------
--- Query 4: Top 10 Best-Rated Deliveries
-----------------------------------------------------------
+st.subheader("Deliveries by City")
 
-SELECT
-    ORDER_ID,
-    DRIVER_RATING,
-    CITY,
-    VEHICLE_TYPE,
-    IS_ONTIME
-FROM DELIVERIES
-ORDER BY DRIVER_RATING DESC
-LIMIT 10;
+st.bar_chart(
+    city_orders.set_index("CITY")
+)
 
-----------------------------------------------------------
--- Query 5: Daily Delivery Volume
-----------------------------------------------------------
+# -----------------------------
+# On-Time Performance by City
+# -----------------------------
 
-SELECT
-    ORDER_DATE,
-    COUNT(*) AS DELIVERIES_PER_DAY
-FROM DELIVERIES
-GROUP BY ORDER_DATE
-ORDER BY ORDER_DATE;
+city_ontime = (
+    df.groupby("CITY")
+      .apply(
+          lambda x:
+          ((x["IS_ONTIME"]=="Yes").mean()*100)
+      )
+      .reset_index(name="ONTIME_PERCENT")
+)
 
+st.subheader("On-Time % by City")
+
+st.bar_chart(
+    city_ontime.set_index("CITY")
+)
+
+# -----------------------------
+# Vehicle Type Performance
+# -----------------------------
+
+vehicle_perf = (
+    df.groupby("VEHICLE_TYPE")
+    .agg({
+        "DELIVERY_TIME_MIN":"mean",
+        "DISTANCE_KM":"mean"
+    })
+)
+
+st.subheader("Vehicle Performance")
+
+st.bar_chart(vehicle_perf)
+
+# -----------------------------
+# Daily Delivery Volume
+# -----------------------------
+
+daily = (
+    df.groupby("ORDER_DATE")
+    .size()
+    .reset_index(name="DELIVERIES")
+)
+
+daily["ORDER_DATE"] = pd.to_datetime(
+    daily["ORDER_DATE"]
+)
+
+daily = daily.sort_values("ORDER_DATE")
+
+st.subheader("Daily Delivery Volume")
+
+st.line_chart(
+    daily.set_index("ORDER_DATE")
+)
+
+# -----------------------------
+# Top Rated Deliveries
+# -----------------------------
+
+st.subheader("Top Rated Deliveries")
+
+top10 = df.sort_values(
+    by="DRIVER_RATING",
+    ascending=False
+).head(10)
+
+st.dataframe(
+    top10[
+        [
+            "ORDER_ID",
+            "CITY",
+            "VEHICLE_TYPE",
+            "DRIVER_RATING",
+            "IS_ONTIME"
+        ]
+    ],
+    use_container_width=True
+)
